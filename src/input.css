@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+select,
+label,
+.cursor-pointer {
+  cursor: pointer;
+}
+
+@theme {
+  --color-brand-50: #f0fdf4;
+  --color-brand-100: #dcfce7;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-accent: #38bdf8;
+}

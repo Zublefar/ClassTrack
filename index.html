@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="ru" x-data="scheduleApp()" :class="{ 'dark': darkMode }" class="text-[110%]">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>КлассТрек</title>
+    <!-- Tailwind CSS (Local production build) -->
+    <link rel="stylesheet" href="dist/output.css">
+    <!-- Alpine.js (Local) -->
+    <script defer src="vendor/alpine/alpine.min.js"></script>
+    <!-- FontAwesome (Local) -->
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        input[type="time"] {
+            box-sizing: border-box;
+            max-width: 100%;
+            -webkit-appearance: none;
+        }
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            opacity: 0.45;
+            cursor: pointer;
+        }
+        .dark input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            opacity: 0.5;
+        }
+        @media print {
+            html, body {
+                height: auto !important;
+                min-height: 0 !important;
+                background: white !important;
+                overflow: visible !important;
+            }
+            body * {
+                visibility: hidden !important;
+            }
+            #print-container, #print-container * {
+                visibility: visible !important;
+            }
+            #print-container {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                color: black !important;
+            }
+            @page {
+                size: portrait;
+                margin: 8mm;
+            }
+            table {
+                page-break-inside: auto;
+            }
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans antialiased min-h-screen flex flex-col transition-colors duration-200" @click="activeMenuDay = null">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors duration-200 py-2.5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-3">
+            <!-- Student Selector (Left) - Searchable Dropdown -->
+            <div x-show="!currentUser || currentUser.role !== 2" class="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 border border-gray-200 dark:border-gray-600 w-full md:w-auto" @click.outside="showStudentDropdown = false">
+                <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 px-1.5 sm:px-3 shrink-0"><i class="fa-solid fa-user-graduate mr-1 text-teal-600 dark:text-teal-400"></i></span>
+                <div class="relative flex-1 md:flex-initial">
+                            <input type="text" 
+                                   x-model="studentQuery" 
+                                   @focus="showStudentDropdown = true" 
+                                   @input="showStudentDropdown = true" 
+                                   placeholder="Выберите ученика" 
+                                   :class="(darkMode, !currentStudentId) ? 'border-[#FA8072] bg-[#FA8072]/15 dark:bg-red-950/40 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500'"
+                                    class="text-xs sm:text-sm font-medium rounded-md px-2.5 py-1.5 pr-7 border focus:outline-none focus:ring-2 focus:ring-teal-500 w-full md:w-[280px] transition-colors">
+                    
+                    <!-- Clear Button (X) -->
+                    <button x-show="currentStudentId || studentQuery" @click="currentStudentId = null; studentQuery = ''; showStudentDropdown = false;" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs px-1" title="Очистить" x-cloak>
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    
+                    <!-- Dropdown List -->
+                    <div x-show="showStudentDropdown" class="absolute left-0 mt-1 w-full sm:w-64 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-600 max-h-60 overflow-y-auto z-50 py-1 text-xs sm:text-sm" x-cloak>
+                        <template x-for="student in sortedStudents.filter(s => !studentQuery || s.name.toLowerCase().includes(studentQuery.toLowerCase()))" :key="student.id">
+                            <div @click="currentStudentId = student.id; studentQuery = student.name + ' (' + (student.money || 0) + ' ₽)'; showStudentDropdown = false;" 
+                                 class="px-3 py-2 hover:bg-teal-50 dark:hover:bg-gray-700 cursor-pointer text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                                <span class="font-medium" x-text="student.name"></span>
+                                <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold ml-2" x-text="(student.money || 0) + ' ₽'"></span>
+                            </div>
+                        </template>
+                        <div x-show="sortedStudents.filter(s => !studentQuery || s.name.toLowerCase().includes(studentQuery.toLowerCase())).length === 0" class="px-3 py-2 text-gray-400 italic">
+                            Ученики не найдены
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div x-show="currentUser && currentUser.role === 2" class="text-sm font-bold text-gray-700 dark:text-gray-200 flex items-center space-x-2 w-full md:w-auto" x-cloak>
+                <i class="fa-solid fa-user-graduate text-teal-600 dark:text-teal-400"></i>
+                <span>Ученик: <span x-text="students.find(s => s.id == currentStudentId)?.name || 'Загрузка...'"></span></span>
+                <span @click="const st = students.find(s => s.id == currentStudentId); if (st) openHistoryModal(st);" class="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 px-2 py-0.5 rounded-full font-semibold cursor-pointer hover:opacity-80 transition" title="Нажмите для просмотра истории списаний" x-text="(students.find(s => s.id == currentStudentId)?.money || 0) + ' ₽'"></span>
+            </div>
+
+            <!-- Right Controls: Week, Theme, Save -->
+            <div class="flex items-center justify-end space-x-1.5 sm:space-x-2 shrink-0 w-full md:w-auto ml-auto">
+                <!-- Week Selector -->
+                <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 border border-gray-200 dark:border-gray-600">
+                    <button @click="prevWeek()" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition mx-1" title="Предыдущая неделя">
+                        <i class="fa-solid fa-backward-step text-base"></i>
+                    </button>
+                    <select x-model.number="selectedWeek" @change="onWeekChange()" class="bg-white dark:bg-gray-800 text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 rounded-md px-2.5 py-1 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 w-auto mx-1">
+                        <template x-for="week in weeks" :key="week.id">
+                            <option :value="week.id" :selected="week.id === selectedWeek" x-text="week.range"></option>
+                        </template>
+                    </select>
+                    <button @click="nextWeek()" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition mx-1" title="Следующая неделя">
+                        <i class="fa-solid fa-forward-step text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Dark Mode Toggle -->
+                <button @click="toggleDarkMode()" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition" title="Переключить тему">
+                    <i :class="darkMode ? 'fa-solid fa-sun text-amber-400' : 'fa-solid fa-moon text-gray-700'"></i>
+                </button>
+
+                <!-- Logout Button -->
+                <button @click="logout()" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-gray-600 transition" title="Выйти (Logout)">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-xs transition-colors duration-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 overflow-x-auto">
+            <button @click="activeTab = 'schedule'" :class="activeTab === 'schedule' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap">
+                <i class="fa-solid fa-calendar-week mr-2"></i>Расписание ученика
+            </button>
+            <button x-show="currentUser && (currentUser.role === 0 || currentUser.role === 1)" @click="activeTab = 'matrix'" :class="activeTab === 'matrix' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
+                <i class="fa-solid fa-table mr-2"></i>Сводная матрица
+            </button>
+            <button x-show="currentUser && (currentUser.role === 0 || currentUser.role === 1)" @click="activeTab = 'class_schedule'; loadClassSchedules();" :class="activeTab === 'class_schedule' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
+                <i class="fa-solid fa-book-open mr-2"></i>Расписание уроков
+            </button>
+            <button x-show="currentUser && currentUser.role === 0" @click="activeTab = 'students'" :class="activeTab === 'students' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
+                <i class="fa-solid fa-users mr-2"></i>Справочник учеников <span class="ml-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full" x-text="students.length"></span>
+            </button>
+            <button x-show="currentUser && currentUser.role === 0" @click="activeTab = 'clubs'" :class="activeTab === 'clubs' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
+                <i class="fa-solid fa-puzzle-piece mr-2"></i>Справочник кружков <span class="ml-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full" x-text="clubs.length"></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+
+        <!-- TAB 1: SCHEDULE EDITOR -->
+        <div x-show="activeTab === 'schedule'" class="space-y-6">
+            <!-- Days of Week Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 transition-opacity duration-200" :class="{ 'opacity-40 pointer-events-none select-none': !currentStudentId }">
+                <template x-for="(dayName, index) in daysOfWeek" :key="dayName + '-' + (currentStudentId || 'none')">
+                    <div :class="{ 'pointer-events-none select-none': currentUser && currentUser.role === 2 && isDayPassed(index) }" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden hover:shadow-md transition relative">
+                        
+                        <!-- Past Day Blur Overlay for Role 2 -->
+                        <div x-show="currentUser && currentUser.role === 2 && isDayPassed(index)" class="absolute inset-0 bg-white/60 dark:bg-gray-900/70 backdrop-blur-[1px] z-25 pointer-events-none select-none rounded-2xl" x-cloak></div>
+                        
+                        <!-- Absent Overlay -->
+                        <div x-show="getDayData(dayName).absent" @click="cancelAbsent(dayName)" class="absolute inset-0 bg-gray-900/70 dark:bg-gray-900/85 z-20 flex flex-col items-center justify-center backdrop-blur-[1px] cursor-pointer group p-4 text-center" x-cloak title="Нажмите, чтобы отменить отсутствие">
+                            <span class="bg-red-600 hover:bg-red-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-lg uppercase tracking-wider transition transform group-hover:scale-105" x-text="getDayData(dayName).absentLabel || 'Отсутствует'"></span>
+                            <span class="text-xs text-gray-300 mt-2 opacity-80 group-hover:opacity-100">Нажмите для отмены</span>
+                        </div>
+
+                        <!-- Day Header with Stacked Name & Date & Close Button -->
+                        <div class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/50 px-4 py-3.5 border-b border-gray-200 dark:border-gray-700 flex flex-col z-10">
+                            <div class="flex items-center justify-between relative">
+                                <div class="flex flex-col">
+                                    <h3 class="font-bold text-gray-800 dark:text-gray-100 text-base leading-tight" x-text="dayName"></h3>
+                                    <span class="text-[11px] font-semibold text-teal-700 dark:text-teal-300 mt-0.5" x-text="getDateForDay(index)"></span>
+                                </div>
+                                <div class="flex items-center">
+                                    <!-- Close Button with Dropdown -->
+                                    <div class="relative" @click.stop>
+                                        <button @click="activeMenuDay = (activeMenuDay === dayName ? null : dayName)" class="w-6 h-6 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 text-gray-600 dark:text-gray-300 flex items-center justify-center text-xs transition z-30" title="Отметить отсутствие">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+
+                                        <!-- Reason Popup Menu -->
+                                        <div x-show="activeMenuDay === dayName" @click.outside="activeMenuDay = null" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-xl shadow-xl border border-gray-200 dark:border-gray-600 py-1.5 z-40 text-xs" x-cloak>
+                                            <button @click="setAbsent(dayName, 'На больничном')" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium flex items-center">
+                                                <i class="fa-solid fa-bed-pulse mr-2 text-amber-500"></i>На больничном
+                                            </button>
+                                            <button @click="setAbsent(dayName, 'Отсутствует по заявлению')" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium flex items-center">
+                                                <i class="fa-solid fa-file-lines mr-2 text-sky-500"></i>Заявление
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Day Content -->
+                        <div class="p-4 space-y-4 flex-1 flex flex-col justify-between">
+                            <div class="space-y-4">
+                                <!-- 1. Meals: Lunch & Snack Checkboxes -->
+                                <div class="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700 space-y-2.5">
+                                    <span class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Питание</span>
+                                    <label class="flex items-center space-x-3 cursor-pointer select-none">
+                                        <input type="checkbox" x-model="getDayData(dayName).lunch" @change="autoSave(dayName)" class="w-4 h-4 text-teal-600 rounded border-gray-300 dark:border-gray-600 focus:ring-teal-500 bg-white dark:bg-gray-800">
+                                        <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center">
+                                            <i class="fa-solid fa-utensils text-orange-500 mr-2 w-4"></i>Обед
+                                        </span>
+                                    </label>
+                                    <label class="flex items-center space-x-3 cursor-pointer select-none">
+                                        <input type="checkbox" x-model="getDayData(dayName).snack" @change="autoSave(dayName)" class="w-4 h-4 text-teal-600 rounded border-gray-300 dark:border-gray-600 focus:ring-teal-500 bg-white dark:bg-gray-800">
+                                        <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center">
+                                            <i class="fa-solid fa-cookie-bite text-amber-600 mr-2 w-4"></i>Полдник
+                                        </span>
+                                    </label>
+                                </div>
+
+                                 <!-- 2. Departure Time -->
+                                 <div class="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700 space-y-2 min-w-0">
+                                     <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Время ухода</label>
+                                     <div class="relative min-w-0">
+                                         <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400 dark:text-gray-500">
+                                             <i class="fa-regular fa-clock"></i>
+                                         </span>
+                                         <input type="time" x-model="getDayData(dayName).departure" @change="autoSave(dayName)" class="w-full bg-white dark:bg-gray-800 text-sm font-medium text-gray-800 dark:text-gray-100 rounded-lg pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                                     </div>
+                                 </div>
+
+                                <!-- 3. Clubs Selection -->
+                                <div class="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Кружки на день</span>
+                                        <span class="text-xs bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 font-bold px-1.5 py-0.5 rounded-full" x-text="getDayData(dayName).clubs.length"></span>
+                                    </div>
+                                    
+                                    <!-- Available Clubs for this day from directory -->
+                                    <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                        <template x-for="club in getClubsForDay(dayName)" :key="club.id">
+                                            <label class="flex items-start space-x-2.5 p-1.5 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition cursor-pointer text-xs">
+                                                 <input type="checkbox" :value="club.id" x-model="getDayData(dayName).clubs" @change="autoSave(dayName)" class="mt-0.5 w-3.5 h-3.5 text-teal-600 rounded border-gray-300 dark:border-gray-600 focus:ring-teal-500 bg-white dark:bg-gray-800">
+                                                <div class="leading-tight">
+                                                    <span class="font-semibold text-gray-800 dark:text-gray-200" x-text="club.name"></span>
+                                                    <span class="block text-gray-400 text-[10px]" x-text="club.time"></span>
+                                                </div>
+                                            </label>
+                                        </template>
+                                        <div x-show="getClubsForDay(dayName).length === 0" class="text-xs text-gray-400 italic py-1">
+                                            Нет кружков в этот день
+                                        </div>
+                                    </div>
+                                </div>
+
+                                 <!-- 4. Comment Field (Auto-expanding Textarea) -->
+                                 <div class="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700 space-y-1.5">
+                                     <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Комментарий</label>
+                                     <textarea rows="1" x-model="getDayData(dayName).comment" @input="autoResize($el)" @focus="autoResize($el)" @change="autoSave(dayName)" x-init="$nextTick(() => autoResize($el)); setTimeout(() => autoResize($el), 150); setTimeout(() => autoResize($el), 400);" x-effect="if (getDayData(dayName).comment !== undefined) { $nextTick(() => autoResize($el)); }" placeholder="Введите комментарий..." class="w-full bg-white dark:bg-gray-800 text-xs text-gray-800 dark:text-gray-100 rounded-lg px-3 pt-1.5 pb-2 min-h-[42px] border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none resize-none overflow-hidden"></textarea>
+                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- TAB 2: MATRIX VIEW -->
+        <div x-show="activeTab === 'matrix'" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-200">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Сводная матрица</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Неделя <span x-text="selectedWeekNum"></span> (<span x-text="selectedWeekDateRange"></span>)</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div x-show="matrixFilter.day && matrixFilter.type" class="flex items-center bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 px-3 py-1.5 rounded-lg text-xs font-medium border border-teal-200 dark:border-teal-700">
+                            <span>Фильтр: <span class="font-bold" x-text="matrixFilter.day"></span> — <span class="font-bold" x-text="matrixFilter.type === 'lunch' ? 'Обед' : 'Полдник'"></span></span>
+                            <button @click="matrixFilter = { day: null, type: null }" class="ml-2 hover:text-red-600 dark:hover:text-red-400 transition">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <select x-model="printDayName" class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none">
+                            <template x-for="day in daysOfWeek" :key="day">
+                                <option :value="day" :selected="day === printDayName" x-text="day"></option>
+                            </template>
+                        </select>
+                        <button @click="window.print()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition flex items-center">
+                            <i class="fa-solid fa-print mr-2"></i>Печать
+                        </button>
+                    </div>
+                </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                            <th class="py-3 px-4">ФИО Ученика</th>
+                            <template x-for="(dayName, index) in daysOfWeek" :key="dayName">
+                                <th class="py-3 px-4">
+                                    <div x-text="dayName"></div>
+                                    <div class="text-[10px] font-normal text-teal-600 dark:text-teal-400 mb-1" x-text="getDateForDay(index)"></div>
+                                    <div class="flex items-center gap-1.5 text-[11px] font-normal">
+                                        <button @click="setMatrixFilter(dayName, 'lunch')" 
+                                            :class="(matrixFilter.day === dayName && matrixFilter.type === 'lunch') ? 'bg-emerald-600 text-white font-bold' : 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200'" 
+                                            class="px-1.5 py-0.5 rounded transition flex items-center space-x-1"
+                                            title="Фильтровать по обеду">
+                                            <span>Обед:</span>
+                                            <span class="font-bold" x-text="students.filter(s => { const sc = getStudentDayData(s, dayName); return !sc.absent && sc.lunch; }).length"></span>
+                                        </button>
+                                        <button @click="setMatrixFilter(dayName, 'snack')" 
+                                            :class="(matrixFilter.day === dayName && matrixFilter.type === 'snack') ? 'bg-amber-600 text-white font-bold' : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200'" 
+                                            class="px-1.5 py-0.5 rounded transition flex items-center space-x-1"
+                                            title="Фильтровать по полднику">
+                                            <span>Полдник:</span>
+                                            <span class="font-bold" x-text="students.filter(s => { const sc = getStudentDayData(s, dayName); return !sc.absent && sc.snack; }).length"></span>
+                                        </button>
+                                    </div>
+                                </th>
+                            </template>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm" :key="matrixKey">
+                        <template x-for="student in sortedStudents" :key="student.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+                                <td class="py-3 px-4 font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap" x-text="student.name"></td>
+                                <template x-for="day in daysOfWeek" :key="day">
+                                    <td class="py-3 px-4 text-xs text-gray-600 dark:text-gray-300" :key="selectedWeek + '-' + student.id + '-' + day">
+                                        <div class="space-y-1" x-data="{ 
+                                            get sched() { return getStudentDayData(student, day); } 
+                                        }">
+                                            <template x-if="sched.absent">
+                                                <div>
+                                                    <span class="inline-block bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 px-2 py-0.5 rounded font-bold text-xs uppercase" x-text="sched.absentLabel || 'Отсутствует'"></span>
+                                                    <div x-show="sched.comment" class="text-gray-500 dark:text-gray-400 italic text-[11px] mt-1">
+                                                        💬 <span x-text="sched.comment"></span>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="!sched.absent">
+                                                <div>
+                                                    <div class="flex items-center space-x-2">
+                                                        <span :class="sched.lunch ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'" class="px-1.5 py-0.5 rounded font-medium">Обед</span>
+                                                        <span :class="sched.snack ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'" class="px-1.5 py-0.5 rounded font-medium">Полдник</span>
+                                                        <span class="font-mono font-bold text-gray-700 dark:text-gray-200" x-text="sched.departure || '--:--'"></span>
+                                                    </div>
+                                                     <div x-show="sched.clubs && sched.clubs.length > 0" class="text-teal-600 dark:text-teal-300 font-medium">
+                                                         <i class="fa-solid fa-puzzle-piece mr-1"></i><span x-text="sched.clubs.map(cId => clubs.find(cl => cl.id == cId) || {name: 'Кружок #' + cId, time: '00:00'}).sort((a, b) => a.time.localeCompare(b.time)).map(cl => cl.name + ' (' + cl.time + ')').join(', ')"></span>
+                                                     </div>
+                                                    <div x-show="sched.comment" class="text-gray-500 dark:text-gray-400 italic text-[11px] mt-1">
+                                                        💬 <span x-text="sched.comment"></span>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </td>
+                                </template>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: CLASS SCHEDULE -->
+        <div x-show="activeTab === 'class_schedule'" class="space-y-6" x-cloak>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+                <template x-for="(dayName, index) in daysOfWeek" :key="dayName">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden hover:shadow-md transition relative">
+                        
+                        <!-- Non-school day overlay -->
+                        <div x-show="classScheduleAbsent[dayName]" @click="toggleClassScheduleAbsent(dayName)" class="absolute inset-0 bg-amber-900/60 dark:bg-amber-950/75 z-20 flex flex-col items-center justify-center backdrop-blur-[1px] cursor-pointer group p-4 text-center" x-cloak title="Нажмите, чтобы отменить">
+                            <span class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-lg uppercase tracking-wider transition transform group-hover:scale-105">Не учебный день</span>
+                            <span class="text-xs text-amber-100 mt-2 opacity-80 group-hover:opacity-100">Нажмите для отмены</span>
+                        </div>
+
+                        <div class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/50 px-4 py-3.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between z-10">
+                            <div class="flex flex-col">
+                                <h3 class="font-bold text-gray-800 dark:text-gray-100 text-base leading-tight" x-text="dayName"></h3>
+                                <span class="text-[11px] font-semibold text-teal-700 dark:text-teal-300 mt-0.5" x-text="getDateForDay(index)"></span>
+                            </div>
+                            <div class="flex items-center space-x-1.5">
+                                <button @click="openAddClassLessonModal(dayName)" class="w-6 h-6 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-teal-500 hover:text-white dark:hover:bg-teal-600 text-gray-600 dark:text-gray-300 flex items-center justify-center text-xs transition z-30" title="Добавить урок">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                                <button @click="toggleClassScheduleAbsent(dayName)" class="w-6 h-6 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-600 text-gray-600 dark:text-gray-300 flex items-center justify-center text-xs transition z-30" title="Отметить не учебный день">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="p-4 flex-1 space-y-3 bg-white dark:bg-gray-800">
+                            <template x-if="!classSchedules[dayName] || classSchedules[dayName].length === 0">
+                                <div class="text-center py-6 text-gray-400 dark:text-gray-500 text-sm italic">Нет уроков</div>
+                            </template>
+                            <template x-for="(lesson, lIndex) in (classSchedules[dayName] || [])" :key="lesson.id">
+                                <div class="space-y-3">
+                                    <div class="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-2 text-sm relative">
+                                        <div class="flex items-center justify-between font-bold text-xs text-teal-600 dark:text-teal-400">
+                                            <span>Урок <span x-text="lesson.lesson_number"></span></span>
+                                            <span class="font-mono text-gray-500 dark:text-gray-400" x-text="lesson.start_time.substring(0, 5) + ' - ' + lesson.end_time.substring(0, 5)"></span>
+                                        </div>
+                                        <div class="font-bold text-gray-900 dark:text-gray-100 text-sm" x-text="lesson.lesson"></div>
+                                        
+                                        <!-- Bottom row: homework left/flex-1, delete button right -->
+                                        <div class="flex items-center justify-between pt-1 gap-2">
+                                            <div class="flex-1 min-w-0">
+                                                <template x-if="lesson.homework">
+                                                    <div @click="openEditHomeworkModal(lesson)" class="text-xs text-gray-600 dark:text-gray-300 bg-gray-100/70 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-2 py-1 rounded-lg font-medium cursor-pointer hover:bg-gray-200/50 transition truncate" title="Нажмите, чтобы изменить Д/З">
+                                                        <i class="fa-solid fa-pen-to-square mr-1 text-teal-600 dark:text-teal-400"></i><span x-text="lesson.homework"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!lesson.homework">
+                                                    <button @click="openEditHomeworkModal(lesson)" class="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center font-medium">
+                                                        <i class="fa-solid fa-plus mr-1"></i>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                            <div class="shrink-0">
+                                                <button @click="deleteClassLesson(lesson.id)" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition p-1" title="Удалить урок">
+                                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <template x-if="lesson.break_minutes && lIndex < (classSchedules[dayName].length - 1)">
+                                        <div class="text-center text-xs text-gray-500 dark:text-gray-400 font-medium py-0.5">
+                                            ☕ Перемена <span x-text="lesson.break_minutes"></span> минут
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <div x-show="activeTab === 'students'" class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col md:flex-row items-center justify-between gap-4 transition-colors duration-200">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white">Справочник учеников</h2>
+                    <div class="mt-2">
+                        <input type="text" x-model="studentSearch" placeholder="Поиск ученика..." class="bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none w-full md:w-64">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <button @click="runSnackFeeScript()" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-sm transition flex items-center whitespace-nowrap">
+                        <i class="fa-solid fa-coins mr-2"></i>Списать за полдник
+                    </button>
+                    <button @click="openAddStudentModal()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-sm transition flex items-center whitespace-nowrap">
+                        <i class="fa-solid fa-user-plus mr-2"></i>Добавить ученика
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-200">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                            <th class="py-3.5 px-6">ID</th>
+                            <th class="py-3.5 px-6">ФИО Ученика (по алфавиту)</th>
+                            <th class="py-3.5 px-6">Деньги</th>
+                            <th class="py-3.5 px-6 text-right">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <template x-for="student in filteredStudents" :key="student.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+                                <td class="py-4 px-6 font-mono text-gray-400" x-text="student.id"></td>
+                                <td class="py-4 px-6 font-semibold text-gray-900 dark:text-gray-100" x-text="student.name"></td>
+                                <td class="py-4 px-6 font-medium text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                                    <span x-text="student.money ? student.money + ' ₽' : '0 ₽'"></span>
+                                    <div class="flex items-center space-x-1.5">
+                                        <button @click="openMoneyModal(student)" class="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-2.5 py-1 rounded-lg transition font-semibold">
+                                            <i class="fa-solid fa-ruble-sign mr-1"></i>Изменить
+                                        </button>
+                                        <button @click="openHistoryModal(student)" class="text-xs bg-sky-50 dark:bg-sky-900/40 hover:bg-sky-100 dark:hover:bg-sky-900 text-sky-700 dark:text-sky-300 px-2.5 py-1 rounded-lg transition font-semibold">
+                                            <i class="fa-solid fa-clock-rotate-left mr-1"></i>История
+                                        </button>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-right space-x-2">
+                                    <button @click="selectStudentAndEdit(student.id)" class="text-teal-600 dark:text-teal-300 hover:text-teal-800 font-medium text-xs bg-teal-50 dark:bg-teal-900/40 px-3 py-1.5 rounded-lg transition">
+                                        <i class="fa-solid fa-pen-to-square mr-1"></i>Расписание
+                                    </button>
+                                    <button @click="deleteStudent(student.id)" class="text-red-600 dark:text-red-400 hover:text-red-800 font-medium text-xs bg-red-50 dark:bg-red-900/40 px-3 py-1.5 rounded-lg transition">
+                                        <i class="fa-solid fa-trash mr-1"></i>Удалить
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 4: CLUBS DIRECTORY -->
+        <div x-show="activeTab === 'clubs'" class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col md:flex-row items-center justify-between gap-4 transition-colors duration-200">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white">Справочник кружков</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Сортировка по дням недели и времени</p>
+                </div>
+                <button @click="openAddClubModal()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-sm transition flex items-center">
+                    <i class="fa-solid fa-plus mr-2"></i>Добавить кружок
+                </button>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-200">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                            <th class="py-3.5 px-6">Наименование кружка</th>
+                            <th class="py-3.5 px-6">День</th>
+                            <th class="py-3.5 px-6">Время</th>
+                            <th class="py-3.5 px-6 text-right">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <template x-for="club in sortedClubs" :key="club.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+                                <td class="py-4 px-6 font-semibold text-gray-900 dark:text-gray-100" x-text="club.name"></td>
+                                <td class="py-4 px-6">
+                                    <span class="text-xs font-bold uppercase tracking-wider bg-teal-50 dark:bg-teal-900/40 text-teal-800 dark:text-teal-300 px-2.5 py-1 rounded-lg" x-text="club.day"></span>
+                                </td>
+                                <td class="py-4 px-6 font-mono text-gray-600 dark:text-gray-300 text-xs">
+                                    <i class="fa-regular fa-clock mr-1 text-gray-400"></i><span x-text="club.time"></span>
+                                </td>
+                                <td class="py-4 px-6 text-right space-x-2">
+                                    <button @click="deleteClub(club.id)" class="text-red-600 dark:text-red-400 hover:text-red-800 font-medium text-xs bg-red-50 dark:bg-red-900/40 px-3 py-1.5 rounded-lg transition">
+                                        <i class="fa-solid fa-trash mr-1"></i>Удалить
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="sortedClubs.length === 0">
+                            <td colspan="4" class="py-6 text-center text-gray-400 italic text-sm">Справочник кружков пуст</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal: History Logs -->
+    <div x-show="showHistoryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-3xl p-6 space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white" x-text="historyStudent ? 'История счета: ' + historyStudent.name : 'История счета'"></h3>
+                <button @click="showHistoryModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="overflow-y-auto flex-1 pr-1">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                            <th class="py-3 px-4">Дата и время</th>
+                            <th class="py-3 px-4">Тип</th>
+                            <th class="py-3 px-4">Описание события</th>
+                            <th class="py-3 px-4 text-center">Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                        <template x-for="log in studentLogs" :key="log.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+                                <td class="py-3 px-4 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap" x-text="log.event_datetime"></td>
+                                <td class="py-3 px-4">
+                                    <span class="bg-sky-50 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-semibold text-xs px-2 py-0.5 rounded" x-text="log.event_type"></span>
+                                </td>
+                                <td class="py-3 px-4 text-gray-800 dark:text-gray-200 text-xs" x-text="log.event_message"></td>
+                                <td class="py-3 px-4 text-center">
+                                    <span :class="log.error == 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300'" class="px-2 py-0.5 rounded text-xs font-bold" x-text="log.error == 0 ? 'Успешно' : 'Ошибка'"></span>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="studentLogs.length === 0">
+                            <td colspan="4" class="py-6 text-center text-gray-400 italic text-sm">История изменений пуста</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex items-center justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
+                <button @click="showHistoryModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Snack Fee -->
+    <div x-show="showSnackModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Списание за полдник</h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Дата списания</label>
+                <input type="date" x-model="snackDate" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Сумма списания (руб.)</label>
+                <input type="number" step="any" x-model="snackAmount" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showSnackModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="executeSnackFee()" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Списать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Money -->
+    <div x-show="showMoneyModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white" x-text="moneyStudent ? 'Изменить баланс: ' + moneyStudent.name : 'Изменить баланс'"></h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Сумма (положительная для добавления, отрицательная для списания)</label>
+                <input type="number" step="any" x-model="moneyInput" placeholder="Например: 500 или -200" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showMoneyModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="updateMoney()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Применить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Student -->
+    <div x-show="showStudentModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Добавить нового ученика</h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">ФИО Ученика</label>
+                <input type="text" x-model="newStudentName" placeholder="Иванов Иван" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showStudentModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="addStudent()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Class Homework -->
+    <div x-show="showHomeworkModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Домашнее задание: <span x-text="homeworkLesson ? homeworkLesson.lesson : ''"></span></h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Текст домашнего задания</label>
+                <textarea x-model="homeworkInput" rows="3" placeholder="Упражнение 15, стр. 20" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none"></textarea>
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showHomeworkModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="saveClassHomework()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div x-show="showClassLessonModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Добавить урок (<span x-text="classLessonModalDay"></span>)</h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Наименование урока</label>
+                <input type="text" x-model="newClassLessonName" placeholder="Математика" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showClassLessonModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="addClassLesson()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Добавить</button>
+            </div>
+        </div>
+    </div>
+    <div x-show="showClubModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Добавить новый кружок</h3>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Название кружка</label>
+                <input type="text" x-model="newClub.name" placeholder="Шахматы" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">День недели</label>
+                <select x-model="newClub.day" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                    <template x-for="day in daysOfWeek" :key="day">
+                        <option :value="day" x-text="day"></option>
+                    </template>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Время</label>
+                <input type="time" x-model="newClub.time" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="showClubModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
+                <button @click="addClub()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Auth Login Prompt -->
+    <div x-show="showAuthModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-xs" x-cloak>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div class="text-center space-y-1">
+                <div class="w-12 h-12 bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-2 text-xl">
+                    <i class="fa-solid fa-lock"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Авторизация в системе КлассТрек</h3>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <input type="text" x-model="authLogin" placeholder="Логин" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                </div>
+                <div>
+                    <input type="password" x-model="authPassword" @keyup.enter="submitAuthLogin()" placeholder="Пароль" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                    <p x-show="authError" class="text-xs text-red-600 mt-1.5 font-medium" x-text="authError"></p>
+                </div>
+            </div>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button @click="submitAuthLogin()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition">Войти</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div x-show="toastMessage" x-transition class="fixed bottom-5 right-5 z-50 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm px-4 py-3 rounded-xl shadow-lg flex items-center space-x-2" x-cloak>
+        <i class="fa-solid fa-circle-check text-emerald-400 dark:text-emerald-600"></i>
+        <span x-text="toastMessage"></span>
+    </div>
+
+    <!-- Print-only Form -->
+    <div id="print-container" class="hidden print:block p-0 bg-white text-black font-sans text-xs">
+        <table class="w-full border-collapse border border-gray-800 text-xs">
+            <thead>
+                <tr class="bg-gray-200 text-black">
+                    <th class="border border-gray-800 px-1 py-1 text-center w-8 font-bold">№</th>
+                    <th class="border border-gray-800 px-2 py-1 text-left w-1/3 font-bold">ФИО Ученика</th>
+                    <th class="border border-gray-800 px-2 py-1 text-left font-bold" x-text="printDayName + ' • ' + getDateForDay(daysOfWeek.indexOf(printDayName))"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="(student, index) in sortedStudents" :key="student.id">
+                    <tr class="border-b border-gray-600">
+                        <td class="border border-gray-800 px-1 py-1 text-center font-mono font-bold text-black" x-text="index + 1"></td>
+                        <td class="border border-gray-800 px-2 py-1 font-semibold text-black" x-text="student.name"></td>
+                        <td class="border border-gray-800 px-2 py-1 text-black" :key="selectedWeek + '-' + printDayName + '-' + student.id">
+                            <template x-if="getStudentDayData(student, printDayName).absent">
+                                <span class="font-bold uppercase text-red-600" x-text="getStudentDayData(student, printDayName).absentLabel || 'Отсутствует'"></span>
+                            </template>
+                            <template x-if="!getStudentDayData(student, printDayName).absent">
+                                <div class="inline-flex flex-wrap items-center gap-x-2 text-[11px] leading-tight">
+                                    <span x-show="getStudentDayData(student, printDayName).lunch" class="font-bold text-emerald-800">[Обед]</span>
+                                    <span x-show="getStudentDayData(student, printDayName).snack" class="font-bold text-amber-800">[Полдник]</span>
+                                    <span class="font-mono font-bold" x-text="getStudentDayData(student, printDayName).departure ? 'Уход: ' + getStudentDayData(student, printDayName).departure : ''"></span>
+                                     <span x-show="getStudentDayData(student, printDayName).clubs && getStudentDayData(student, printDayName).clubs.length > 0" class="text-teal-900 font-medium">
+                                         Кружки: <span x-text="getStudentDayData(student, printDayName).clubs.map(cId => clubs.find(cl => cl.id == cId) || {name: 'Кружок #' + cId, time: '00:00'}).sort((a, b) => a.time.localeCompare(b.time)).map(cl => cl.name + ' (' + cl.time + ')').join(', ')"></span>
+                                     </span>
+                                    <span x-show="getStudentDayData(student, printDayName).comment" class="italic text-gray-800">
+                                        💬 <span x-text="getStudentDayData(student, printDayName).comment"></span>
+                                    </span>
+                                </div>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Application Script with Auto-expanding Textarea and Cleared Values on Absent -->
+    <script>
+        function getISOWeek(date) {
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function scheduleApp() {
+            const now = new Date();
+            const currentDay = now.getDay();
+            const diffToMon = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+            const currentMonday = new Date(now.getFullYear(), now.getMonth(), diffToMon);
+            const monthsFull = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+            const generatedWeeks = [];
+            for (let i = -10; i <= 25; i++) {
+                const mon = new Date(currentMonday);
+                mon.setDate(currentMonday.getDate() + i * 7);
+                const fri = new Date(mon);
+                fri.setDate(mon.getDate() + 4);
+                const weekNum = getISOWeek(mon);
+                generatedWeeks.push({
+                    id: weekNum,
+                    weekNum: weekNum,
+                    startDate: mon,
+                    name: 'Неделя ' + weekNum + ' (' + mon.getDate() + ' ' + monthsFull[mon.getMonth()] + ' - ' + fri.getDate() + ' ' + monthsFull[fri.getMonth()] + ')',
+                    range: mon.getDate() + ' ' + monthsFull[mon.getMonth()] + ' - ' + fri.getDate() + ' ' + monthsFull[fri.getMonth()]
+                });
+            }
+
+            return {
+                activeTab: 'schedule',
+                activeMenuDay: null,
+                darkMode: localStorage.getItem('theme') === 'dark',
+                toggleDarkMode() {
+                    this.darkMode = !this.darkMode;
+                    localStorage.setItem('theme', this.darkMode ? 'dark' : 'light');
+                },
+                weeks: generatedWeeks,
+                selectedWeek: (() => {
+                    const today = new Date();
+                    const dayOfWeek = today.getDay();
+                    let targetDate = new Date(today);
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        targetDate.setDate(targetDate.getDate() + 2);
+                    }
+                    const found = generatedWeeks.find(w => {
+                        const start = new Date(w.startDate);
+                        start.setHours(0, 0, 0, 0);
+                        const end = new Date(start);
+                        end.setDate(end.getDate() + 6);
+                        return targetDate >= start && targetDate <= end;
+                    });
+                    if (found) return found.id;
+                    return generatedWeeks[0].id;
+                })(),
+                get selectedWeekNum() {
+                    return Number(this.selectedWeek);
+                },
+                get selectedWeekName() {
+                    const w = this.weeks.find(x => x.id === this.selectedWeek);
+                    return w ? w.name : '';
+                },
+                get selectedWeekDateRange() {
+                    const w = this.weeks.find(x => x.id === this.selectedWeek);
+                    return w ? w.range : '';
+                },
+                daysOfWeek: ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'],
+                
+                printDayName: (() => {
+                    const daysMap = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+                    const d = daysMap[new Date().getDay()];
+                    return (d === 'Суббота' || d === 'Воскресенье') ? 'Понедельник' : d;
+                })(),
+                
+                getDateForDay(dayIndex) {
+                    const w = this.weeks.find(x => x.id === this.selectedWeek);
+                    const baseDate = w ? w.startDate : new Date();
+                    const targetDate = new Date(baseDate.getTime() + dayIndex * 24 * 60 * 60 * 1000);
+                    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+                    return targetDate.getDate() + ' ' + months[targetDate.getMonth()];
+                },
+
+                isDayPassed(dayIndex) {
+                    const w = this.weeks.find(x => x.id === this.selectedWeek);
+                    const baseDate = w ? w.startDate : new Date();
+                    const targetDate = new Date(baseDate.getTime() + dayIndex * 24 * 60 * 60 * 1000);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const target = new Date(targetDate);
+                    target.setHours(0, 0, 0, 0);
+                    return target < today;
+                },
+
+                students: [],
+                clubs: [],
+                
+                get sortedStudents() {
+                    let list = [...this.students].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+                    if (this.matrixFilter.day && this.matrixFilter.type) {
+                        const d = this.matrixFilter.day;
+                        const t = this.matrixFilter.type;
+                        list = list.filter(student => {
+                            const sched = this.getStudentDayData(student, d);
+                            return !sched.absent && sched[t] === true;
+                        });
+                    }
+                    return list;
+                },
+
+                get sortedClubs() {
+                    const order = { 'Понедельник': 1, 'Вторник': 2, 'Среда': 3, 'Четверг': 4, 'Пятница': 5 };
+                    return [...this.clubs].sort((a, b) => {
+                        const dayDiff = (order[a.day] || 99) - (order[b.day] || 99);
+                        if (dayDiff !== 0) return dayDiff;
+                        return (a.time || '').localeCompare(b.time || '');
+                    });
+                },
+
+                async init() {
+                    this.currentStudentId = null;
+                    this.studentQuery = '';
+                    
+                    try {
+                        const res = await fetch('api.php?action=check_auth').then(r => r.json());
+                        if (res.authenticated) {
+                            this.currentUser = res.user;
+                            this.userRole = res.user.role == 2 ? 'parent' : 'teacher';
+                            if (res.user.role === 2) {
+                                this.activeTab = 'schedule';
+                                if (res.user.student_id) {
+                                    this.currentStudentId = res.user.student_id;
+                                    // Set query once students are loaded
+                                }
+                            }
+                            this.showAuthModal = false;
+                            await this.loadWeekFromServer(this.selectedWeekNum);
+                            
+                            if (res.user.role === 2 && res.user.student_id) {
+                                const st = this.students.find(s => s.id == res.user.student_id);
+                                if (st) {
+                                    this.studentQuery = st.name + ' (' + (st.money || 0) + ' ₽)';
+                                }
+                            }
+                        } else {
+                            this.showAuthModal = true;
+                        }
+                    } catch (e) {
+                        this.showAuthModal = true;
+                    }
+                },
+
+                showAuthModal: true,
+                currentUser: null,
+                authLogin: '',
+                authPassword: '',
+                authError: '',
+
+                openAuthModal() {
+                    this.authLogin = '';
+                    this.authPassword = '';
+                    this.authError = '';
+                    this.showAuthModal = true;
+                },
+
+                submitAuthLogin() {
+                    if (!this.authLogin.trim() || !this.authPassword.trim()) {
+                        this.authError = 'Введите логин и пароль';
+                        return;
+                    }
+                    fetch('api.php?action=login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ login: this.authLogin, password: this.authPassword })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            this.currentUser = res.user;
+                            this.userRole = res.user.role == 2 ? 'parent' : 'teacher';
+                            if (res.user.role === 2) {
+                                this.activeTab = 'schedule';
+                                if (res.user.student_id) {
+                                    this.currentStudentId = res.user.student_id;
+                                }
+                            }
+                            this.showAuthModal = false;
+                            this.authLogin = '';
+                            this.authPassword = '';
+                            this.authError = '';
+                            const roleNames = { 0: 'Администратор', 1: 'Модератор', 2: 'Родитель' };
+                            this.showToast('Успешный вход (' + (roleNames[res.user.role] || '') + ')');
+                            this.loadWeekFromServer(this.selectedWeekNum);
+                        } else {
+                            this.authError = res.error || 'Неверный логин или пароль';
+                        }
+                    })
+                    .catch(e => {
+                        this.authError = 'Ошибка авторизации';
+                    });
+                },
+
+                logout() {
+                    fetch('api.php?action=logout').then(() => {
+                        this.currentUser = null;
+                        this.userRole = null;
+                        this.currentStudentId = null;
+                        this.studentQuery = '';
+                        this.showStudentDropdown = false;
+                        this.openAuthModal();
+                    });
+                },
+
+                currentStudentId: null,
+                studentQuery: '',
+                showStudentDropdown: false,
+                matrixKey: 1,
+                matrixFilter: { day: null, type: null },
+                setMatrixFilter(dayName, type) {
+                    if (this.matrixFilter.day === dayName && this.matrixFilter.type === type) {
+                        this.matrixFilter = { day: null, type: null };
+                    } else {
+                        this.matrixFilter = { day: dayName, type: type };
+                    }
+                },
+                matrixFilter: { day: null, type: null },
+                classSchedules: {},
+                classScheduleAbsent: {},
+                showClassLessonModal: false,
+                classLessonModalDay: '',
+                newClassLessonName: '',
+                showHomeworkModal: false,
+                homeworkLesson: null,
+                homeworkInput: '',
+                openEditHomeworkModal(lesson) {
+                    this.homeworkLesson = lesson;
+                    this.homeworkInput = lesson.homework || '';
+                    this.showHomeworkModal = true;
+                },
+                saveClassHomework() {
+                    if (!this.homeworkLesson) return;
+                    fetch('api.php?action=save_class_homework', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: this.homeworkLesson.id,
+                            homework: this.homeworkInput
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            this.showHomeworkModal = false;
+                            this.showToast('Д/З сохранено');
+                            this.loadClassSchedules();
+                        } else {
+                            alert('Ошибка сохранения');
+                        }
+                    })
+                    .catch(e => {
+                        alert('Ошибка сети');
+                    });
+                },
+                deleteClassLesson(id) {
+                    if (confirm('Удалить этот урок? Номера и время последующих уроков пересчитаются.')) {
+                        fetch('api.php?action=delete_class_lesson', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: id })
+                        })
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success) {
+                                this.showToast('Урок удален');
+                                this.loadClassSchedules();
+                            } else {
+                                alert('Ошибка удаления: ' + (res.error || ''));
+                            }
+                        })
+                        .catch(e => {
+                            alert('Ошибка сети');
+                        });
+                    }
+                },
+                classLessonModalDay: '',
+                newClassLessonName: '',
+                openAddClassLessonModal(dayName) {
+                    this.classLessonModalDay = dayName;
+                    this.newClassLessonName = '';
+                    this.showClassLessonModal = true;
+                },
+                addClassLesson() {
+                    const name = this.newClassLessonName.trim();
+                    if (!name) {
+                        alert('Введите наименование урока');
+                        return;
+                    }
+                    fetch('api.php?action=add_class_lesson', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            day_of_week: this.classLessonModalDay,
+                            week_number: this.selectedWeekNum,
+                            lesson: name
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            this.showClassLessonModal = false;
+                            this.showToast('Урок успешно добавлен');
+                            this.loadClassSchedules();
+                        } else {
+                            alert('Ошибка: ' + (res.error || 'не удалось добавить урок'));
+                        }
+                    })
+                    .catch(e => {
+                        alert('Ошибка сети');
+                    });
+                },
+                toggleClassScheduleAbsent(dayName) {
+                    if (!this.classScheduleAbsent[dayName]) {
+                        this.classScheduleAbsent[dayName] = true;
+                    } else {
+                        this.classScheduleAbsent[dayName] = false;
+                    }
+                },
+                loadClassSchedules() {
+                    fetch('api.php?action=get_class_schedules&week=' + this.selectedWeekNum)
+                        .then(r => r.json())
+                        .then(data => {
+                            const grouped = { 'Понедельник': [], 'Вторник': [], 'Среда': [], 'Четверг': [], 'Пятница': [] };
+                            if (Array.isArray(data)) {
+                                data.forEach(item => {
+                                    if (grouped[item.day_of_week]) {
+                                        grouped[item.day_of_week].push(item);
+                                    }
+                                });
+                            }
+                            this.classSchedules = grouped;
+                        })
+                        .catch(e => {
+                            console.error('Failed to load class schedules', e);
+                        });
+                },
+                studentSearch: '',
+                showStudentModal: false,
+                newStudentName: '',
+                showMoneyModal: false,
+                moneyStudent: null,
+                moneyInput: '',
+                showHistoryModal: false,
+                historyStudent: null,
+                studentLogs: [],
+                showSnackModal: false,
+                snackDate: new Date().toISOString().split('T')[0],
+                snackAmount: 100,
+                showClubModal: false,
+                newClub: { name: '', day: 'Понедельник', time: '14:00' },
+                toastMessage: '',
+                onWeekChange() {
+                    this.loadWeekFromServer(this.selectedWeekNum);
+                },
+
+                prevWeek() {
+                    const currentIndex = this.weeks.findIndex(w => w.id === this.selectedWeek);
+                    if (currentIndex > 0) {
+                        this.selectedWeek = this.weeks[currentIndex - 1].id;
+                        this.onWeekChange();
+                    } else if (this.weeks.length > 0) {
+                        // Если текущая неделя не найдена или первая, сдвигаем назад по датам
+                        const firstWeek = this.weeks[0];
+                        const newMon = new Date(firstWeek.startDate);
+                        newMon.setDate(newMon.getDate() - 7);
+                        const newFri = new Date(newMon);
+                        newFri.setDate(newMon.getDate() + 4);
+                        const weekNum = getISOWeek(newMon);
+                        const monthsFull = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+                        this.weeks.unshift({
+                            id: weekNum,
+                            weekNum: weekNum,
+                            startDate: newMon,
+                            name: 'Неделя ' + weekNum + ' (' + newMon.getDate() + ' ' + monthsFull[newMon.getMonth()] + ' - ' + newFri.getDate() + ' ' + monthsFull[newFri.getMonth()] + ')',
+                            range: newMon.getDate() + ' ' + monthsFull[newMon.getMonth()] + ' - ' + newFri.getDate() + ' ' + monthsFull[newFri.getMonth()]
+                        });
+                        this.selectedWeek = weekNum;
+                        this.onWeekChange();
+                    }
+                },
+
+                nextWeek() {
+                    const currentIndex = this.weeks.findIndex(w => w.id === this.selectedWeek);
+                    if (currentIndex !== -1 && currentIndex < this.weeks.length - 1) {
+                        this.selectedWeek = this.weeks[currentIndex + 1].id;
+                        this.onWeekChange();
+                    } else {
+                        const lastWeek = this.weeks[this.weeks.length - 1] || { startDate: new Date() };
+                        const newMon = new Date(lastWeek.startDate);
+                        newMon.setDate(newMon.getDate() + 7);
+                        const newFri = new Date(newMon);
+                        newFri.setDate(newMon.getDate() + 4);
+                        const weekNum = getISOWeek(newMon);
+                        const monthsFull = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+                        this.weeks.push({
+                            id: weekNum,
+                            weekNum: weekNum,
+                            startDate: newMon,
+                            name: 'Неделя ' + weekNum + ' (' + newMon.getDate() + ' ' + monthsFull[newMon.getMonth()] + ' - ' + newFri.getDate() + ' ' + monthsFull[newFri.getMonth()] + ')',
+                            range: newMon.getDate() + ' ' + monthsFull[newMon.getMonth()] + ' - ' + newFri.getDate() + ' ' + monthsFull[newFri.getMonth()]
+                        });
+                        this.selectedWeek = weekNum;
+                        this.onWeekChange();
+                    }
+                },
+
+                async loadWeekFromServer(weekNum) {
+					console.log('Fetching data for week', weekNum);
+					
+					Promise.all([
+						fetch('api.php?action=get_week&week=' + weekNum).then(r => r.json()),
+						fetch('api.php?action=get_clubs').then(r => r.json()),
+						fetch('api.php?action=get_students').then(r => r.json())
+					])
+					.then(([weekData, clubs, students]) => {
+						console.log('Data loaded:', { weekData, clubs, students });
+						
+                        const processedStudents = students.map(s => {
+							const existing = Array.isArray(weekData) ? weekData.find(x => x.id == s.id) : null;
+							const moneyVal = s.money !== undefined && s.money !== null ? parseFloat(s.money) : 0;
+							
+							const studentObj = {
+								id: s.id,
+								name: s.name,
+								money: moneyVal,
+								schedule: existing ? (existing.schedule || {}) : {},
+								schedules: (existing && existing.schedules) ? existing.schedules : { [weekNum]: (existing && existing.schedule ? existing.schedule : {}) }
+							};
+							return studentObj;
+						});
+
+                        this.students = processedStudents;
+						this.clubs = clubs;
+						this.matrixKey++;
+						
+						if (this.currentUser && this.currentUser.role === 2 && this.currentUser.student_id) {
+							this.currentStudentId = this.currentUser.student_id;
+							const st = this.students.find(s => s.id == this.currentStudentId);
+							if (st) {
+								this.studentQuery = st.name + ' (' + (st.money || 0) + ' ₽)';
+							}
+						} else if (this.currentStudentId) {
+							const st = this.students.find(s => s.id == this.currentStudentId);
+							if (st) {
+								this.studentQuery = st.name + ' (' + (st.money || 0) + ' ₽)';
+							}
+						}
+
+                        if (this.activeTab === 'class_schedule') {
+                            this.loadClassSchedules();
+                        }
+						
+						const resizeAll = () => {
+							document.querySelectorAll('textarea').forEach(el => {
+								el.style.height = 'auto';
+								if (el.scrollHeight > 0) {
+									el.style.height = el.scrollHeight + 'px';
+								}
+							});
+						};
+						setTimeout(resizeAll, 100);
+						setTimeout(resizeAll, 300);
+						setTimeout(resizeAll, 600);
+						
+						localStorage.setItem('saved_students', JSON.stringify(this.students));
+						localStorage.setItem('saved_clubs', JSON.stringify(this.clubs));
+					})
+					.catch(e => {
+						console.error('API fetch error:', e);
+					});
+				},
+
+                async saveToServer(weekNum, data) {
+                    try {
+                        await fetch('api.php?action=save_week&week=' + weekNum, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                    } catch (e) {
+                        console.error('Save failed');
+                    }
+                },
+
+                get currentStudent() {
+                    if (!this.currentStudentId) return null;
+                    return this.students.find(s => s.id == this.currentStudentId) || null;
+                },
+
+                getDayData(day) {
+                    if (!this.currentStudent) return { lunch: false, snack: false, departure: '', clubs: [], comment: '', absent: false, absentLabel: '', raw: '' };
+                    if (!this.currentStudent.schedules) {
+                        this.currentStudent.schedules = {};
+                    }
+                    const weekKey = String(this.selectedWeek);
+                    if (!this.currentStudent.schedules[weekKey]) {
+                        const base = this.currentStudent.schedule || {};
+                        const weekDefault = {};
+                        this.daysOfWeek.forEach(d => {
+                            const daySrc = base[d] || { lunch: false, snack: false, departure: '', clubs: [], raw: '' };
+                            weekDefault[d] = {
+                                lunch: daySrc.lunch || false,
+                                snack: daySrc.snack || false,
+                                departure: daySrc.departure || '',
+                                clubs: daySrc.clubs ? [...daySrc.clubs] : [],
+                                comment: daySrc.comment || '',
+                                absent: daySrc.absent || false,
+                                absentLabel: daySrc.absentLabel || '',
+                                raw: daySrc.raw || ''
+                            };
+                        });
+                        this.currentStudent.schedules[weekKey] = weekDefault;
+                    }
+                    return this.currentStudent.schedules[weekKey][day] || (this.currentStudent.schedules[weekKey][day] = { lunch: false, snack: false, departure: '', clubs: [], comment: '', absent: false, absentLabel: '', raw: '' });
+                },
+
+                getStudentDayData(student, day) {
+                    if (!student.schedules) {
+                        student.schedules = {};
+                    }
+                    const weekKey = String(this.selectedWeek);
+                    if (!student.schedules[weekKey]) {
+                        const weekDefault = {};
+                        this.daysOfWeek.forEach(d => {
+                            weekDefault[d] = {
+                                lunch: false,
+                                snack: false,
+                                departure: '',
+                                clubs: [],
+                                comment: '',
+                                absent: false,
+                                absentLabel: '',
+                                raw: ''
+                            };
+                        });
+                        student.schedules[weekKey] = weekDefault;
+                    }
+                    return student.schedules[weekKey][day] || (student.schedules[weekKey][day] = { lunch: false, snack: false, departure: '', clubs: [], comment: '', absent: false, absentLabel: '', raw: '' });
+                },
+
+                setAbsent(day, label) {
+                    const data = this.getDayData(day);
+                    data.absent = true;
+                    data.absentLabel = label;
+                    data.lunch = false;
+                    data.snack = false;
+                    data.departure = '';
+                    data.clubs = [];
+                    this.activeMenuDay = null;
+                    this.autoSave(day);
+                },
+
+                cancelAbsent(day) {
+                    if (confirm("Отменить отсутствие?")) {
+                        const data = this.getDayData(day);
+                        data.absent = false;
+                        data.absentLabel = '';
+                        this.autoSave(day);
+                    }
+                },
+
+                getClubsForDay(day) {
+                    return this.clubs.filter(c => c.day === day).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                },
+
+                get filteredStudents() {
+                    let list = this.sortedStudents;
+                    if (!this.studentSearch) return list;
+                    return list.filter(s => s.name.toLowerCase().includes(this.studentSearch.toLowerCase()));
+                },
+
+                selectStudentAndEdit(id) {
+                    this.currentStudentId = id;
+                    const st = this.students.find(s => s.id == id);
+                    if (st) {
+                        this.studentQuery = st.name + ' (' + (st.money || 0) + ' ₽)';
+                    }
+                    this.activeTab = 'schedule';
+                    this.$nextTick(() => {
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                },
+
+                runSnackFeeScript() {
+                    this.showSnackModal = true;
+                },
+
+                executeSnackFee() {
+                    const amount = parseFloat(this.snackAmount);
+                    if (isNaN(amount) || amount <= 0) {
+                        alert('Введите корректную сумму списания');
+                        return;
+                    }
+                    fetch('write_snack_fees.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: this.snackDate, amount: amount })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            this.showSnackModal = false;
+                            this.showToast(res.message);
+                            this.loadWeekFromServer(this.selectedWeekNum);
+                        } else {
+                            alert('Ошибка: ' + res.error);
+                        }
+                    })
+                    .catch(e => {
+                        alert('Ошибка при выполнении списания за полдник');
+                    });
+                },
+
+                openHistoryModal(student) {
+                    this.historyStudent = student;
+                    this.studentLogs = [];
+                    this.showHistoryModal = true;
+                    fetch('api.php?action=get_student_logs&student_id=' + student.id)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.studentLogs = data;
+                        })
+                        .catch(e => {
+                            console.error('Failed to load logs', e);
+                        });
+                },
+
+                openMoneyModal(student) {
+                    this.moneyStudent = student;
+                    this.moneyInput = '';
+                    this.showMoneyModal = true;
+                },
+
+                updateMoney() {
+                    const amount = parseFloat(this.moneyInput);
+                    if (isNaN(amount) || !this.moneyStudent) return;
+                    fetch('api.php?action=update_money', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: this.moneyStudent.id, amount: amount })
+                    }).then(() => {
+                        this.showMoneyModal = false;
+                        this.showToast('Счет ученика обновлен');
+                        this.loadWeekFromServer(this.selectedWeekNum);
+                    });
+                },
+
+                openAddStudentModal() {
+                    this.newStudentName = '';
+                    this.showStudentModal = true;
+                },
+
+                addStudent() {
+                    if (!this.newStudentName.trim()) return;
+                    fetch('api.php?action=add_student', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: this.newStudentName.trim() })
+                    }).then(() => {
+                        this.newStudentName = '';
+                        this.showStudentModal = false;
+                        this.showToast('Ученик добавлен');
+                        this.loadWeekFromServer(this.selectedWeekNum);
+                    });
+                },
+
+                deleteStudent(id) {
+                    if (confirm('Вы уверены, что хотите удалить ученика?')) {
+                        fetch('api.php?action=delete_student', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: id })
+                        }).then(() => {
+                            this.loadWeekFromServer(this.selectedWeekNum);
+                            this.showToast('Ученик удален');
+                        });
+                    }
+                },
+
+                openAddClubModal() {
+                    this.newClub = { name: '', day: 'Понедельник', time: '14:00' };
+                    this.showClubModal = true;
+                },
+
+                addClub() {
+                    if (!this.newClub.name.trim()) return;
+                    fetch('api.php?action=add_club', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.newClub)
+                    }).then(() => {
+                        this.newClub = { name: '', day: 'Понедельник', time: '14:00' };
+                        this.showClubModal = false;
+                        this.showToast('Кружок добавлен');
+                        this.loadWeekFromServer(this.selectedWeekNum);
+                    });
+                },
+
+                deleteClub(id) {
+                    if (confirm('Удалить кружок?')) {
+                        fetch('api.php?action=delete_club', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: id })
+                        }).then(() => {
+                            this.loadWeekFromServer(this.selectedWeekNum);
+                            this.showToast('Кружок удален');
+                        });
+                    }
+                },
+
+                saveDataToStorage() {
+                    localStorage.setItem('saved_students', JSON.stringify(this.students));
+                    localStorage.setItem('saved_clubs', JSON.stringify(this.clubs));
+                    this.matrixKey++;
+                    this.saveToServer(this.selectedWeekNum, this.students);
+                },
+
+                async saveDayToServer(weekNum, studentId, dayName, dayData) {
+                    try {
+                        await fetch('api.php?action=save_day&week=' + weekNum, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                student_id: studentId,
+                                day: dayName,
+                                data: dayData
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Save day failed', e);
+                    }
+                },
+
+                autoSave(dayName) {
+                    localStorage.setItem('saved_students', JSON.stringify(this.students));
+                    localStorage.setItem('saved_clubs', JSON.stringify(this.clubs));
+                    this.matrixKey++;
+                    
+                    clearTimeout(this._saveTimer);
+                    this._saveTimer = setTimeout(() => {
+                        if (this.currentStudent && dayName) {
+                            this.saveDayToServer(this.selectedWeekNum, this.currentStudent.id, dayName, this.getDayData(dayName));
+                        }
+                    }, 400);
+
+                    this.showToast('Автосохранение');
+                },
+
+                saveData() {
+                    this.saveDataToStorage();
+                    this.showToast('Все изменения успешно сохранены!');
+                },
+
+                autoResize(el) {
+                    if (!el) return;
+                    el.style.height = 'auto';
+                    if (el.scrollHeight > 0) {
+                        el.style.height = Math.max(el.scrollHeight, 56) + 'px';
+                    }
+                },
+
+                showToast(msg) {
+                    this.toastMessage = msg;
+                    setTimeout(() => {
+                        this.toastMessage = '';
+                    }, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
