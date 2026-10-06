@@ -33,6 +33,17 @@ function getCurrentUserId() {
     return ($userSession && isset($userSession['id']) && intval($userSession['id']) > 0) ? intval($userSession['id']) : null;
 }
 
+function getCurrentUserRole() {
+    $userSession = isset($_COOKIE['school_user']) ? json_decode($_COOKIE['school_user'], true) : null;
+    if ($userSession && isset($userSession['role'])) {
+        return intval($userSession['role']);
+    }
+    $role = isset($_COOKIE['school_role']) ? $_COOKIE['school_role'] : null;
+    if ($role === 'parent') return 2;
+    if ($role === 'teacher') return 0;
+    return null;
+}
+
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
 try {
@@ -43,14 +54,19 @@ try {
             $stmt->execute([$userSession['id']]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($user) {
+                $userData = [
+                    'id' => intval($user['id']),
+                    'login' => $user['login'],
+                    'role' => intval($user['role']),
+                    'student_id' => $user['student_id'] ? intval($user['student_id']) : null
+                ];
+                $cookieTime = time() + 7 * 24 * 60 * 60;
+                setcookie('school_user', json_encode($userData), $cookieTime, '/');
+                setcookie('school_role', $user['role'] == 2 ? 'parent' : 'teacher', $cookieTime, '/');
+
                 echo json_encode([
                     'authenticated' => true,
-                    'user' => [
-                        'id' => intval($user['id']),
-                        'login' => $user['login'],
-                        'role' => intval($user['role']),
-                        'student_id' => $user['student_id'] ? intval($user['student_id']) : null
-                    ]
+                    'user' => $userData
                 ]);
                 exit;
             }
@@ -58,6 +74,11 @@ try {
         
         // Fallback for legacy cookies if any
         $role = isset($_COOKIE['school_role']) ? $_COOKIE['school_role'] : null;
+        if ($role === 'teacher' || $role === 'parent') {
+            $cookieTime = time() + 7 * 24 * 60 * 60;
+            setcookie('school_role', $role, $cookieTime, '/');
+        }
+
         if ($role === 'teacher') {
             echo json_encode(['authenticated' => true, 'user' => ['id' => 0, 'login' => 'admin', 'role' => 0, 'student_id' => null]]);
         } elseif ($role === 'parent') {
@@ -105,7 +126,7 @@ try {
                 'role' => intval($user['role']),
                 'student_id' => isset($user['student_id']) && $user['student_id'] ? intval($user['student_id']) : null
             ];
-            $cookieTime = time() + 5 * 24 * 60 * 60;
+            $cookieTime = time() + 7 * 24 * 60 * 60;
             setcookie('school_user', json_encode($userData), $cookieTime, '/');
             setcookie('school_role', $user['role'] == 2 ? 'parent' : 'teacher', $cookieTime, '/');
 
@@ -455,6 +476,23 @@ try {
         }
     }
 
+    elseif ($action === 'update_club' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (isset($input['id'], $input['name'], $input['day'], $input['time'])) {
+            $clubId = intval($input['id']);
+            $stmt = $pdo->prepare('UPDATE clubs SET name = ?, day = ?, time = ? WHERE id = ?');
+            $stmt->execute([trim($input['name']), trim($input['day']), trim($input['time']), $clubId]);
+
+            $currentUserId = getCurrentUserId();
+            $stmtLog = $pdo->prepare('INSERT INTO logs (event_type, event_message, object_id, user_id, error) VALUES (?, ?, ?, ?, ?)');
+            $stmtLog->execute(['clubs', "Изменен кружок: {$input['name']} ({$input['day']} {$input['time']}, ID: $clubId)", $clubId, $currentUserId, 0]);
+
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Неверные данные']);
+        }
+    }
+
     elseif ($action === 'get_class_schedules') {
         try {
             $week = isset($_GET['week']) ? intval($_GET['week']) : 1;
@@ -468,6 +506,10 @@ try {
     }
 
     elseif ($action === 'add_class_lesson' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (getCurrentUserRole() === 2) {
+            echo json_encode(['success' => false, 'error' => 'Недостаточно прав']);
+            exit;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         if (isset($input['day_of_week'], $input['week_number'], $input['lesson'])) {
             $dayOfWeek = trim($input['day_of_week']);
@@ -510,6 +552,10 @@ try {
     }
 
     elseif ($action === 'delete_class_lesson' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (getCurrentUserRole() === 2) {
+            echo json_encode(['success' => false, 'error' => 'Недостаточно прав']);
+            exit;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         if (isset($input['id'])) {
             $lessonId = intval($input['id']);
@@ -560,6 +606,10 @@ try {
     }
 
     elseif ($action === 'save_class_homework' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (getCurrentUserRole() === 2) {
+            echo json_encode(['success' => false, 'error' => 'Недостаточно прав']);
+            exit;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         if (isset($input['id'])) {
             $lessonId = intval($input['id']);

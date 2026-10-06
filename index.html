@@ -148,7 +148,7 @@
             <button x-show="currentUser && (currentUser.role === 0 || currentUser.role === 1)" @click="activeTab = 'matrix'" :class="activeTab === 'matrix' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
                 <i class="fa-solid fa-table mr-2"></i>Сводная матрица
             </button>
-            <button x-show="currentUser && (currentUser.role === 0 || currentUser.role === 1)" @click="activeTab = 'class_schedule'; loadClassSchedules();" :class="activeTab === 'class_schedule' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
+            <button x-show="currentUser && (currentUser.role === 0 || currentUser.role === 1 || currentUser.role === 2)" @click="activeTab = 'class_schedule'; loadClassSchedules();" :class="activeTab === 'class_schedule' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
                 <i class="fa-solid fa-book-open mr-2"></i>Расписание уроков
             </button>
             <button x-show="currentUser && currentUser.role === 0" @click="activeTab = 'students'" :class="activeTab === 'students' ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-semibold' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium'" class="py-4 px-1 border-b-2 text-sm flex items-center transition whitespace-nowrap" x-cloak>
@@ -377,9 +377,11 @@
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden hover:shadow-md transition relative">
                         
                         <!-- Non-school day overlay -->
-                        <div x-show="classScheduleAbsent[dayName]" @click="toggleClassScheduleAbsent(dayName)" class="absolute inset-0 bg-amber-900/60 dark:bg-amber-950/75 z-20 flex flex-col items-center justify-center backdrop-blur-[1px] cursor-pointer group p-4 text-center" x-cloak title="Нажмите, чтобы отменить">
-                            <span class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-lg uppercase tracking-wider transition transform group-hover:scale-105">Не учебный день</span>
-                            <span class="text-xs text-amber-100 mt-2 opacity-80 group-hover:opacity-100">Нажмите для отмены</span>
+                        <div x-show="classScheduleAbsent[dayName]" @click="currentUser && currentUser.role !== 2 ? toggleClassScheduleAbsent(dayName) : null" :class="currentUser && currentUser.role === 2 ? 'cursor-default' : 'cursor-pointer'" class="absolute inset-0 bg-amber-900/60 dark:bg-amber-950/75 z-20 flex flex-col items-center justify-center backdrop-blur-[1px] p-4 text-center" x-cloak :title="currentUser && currentUser.role === 2 ? 'Не учебный день' : 'Нажмите, чтобы отменить'">
+                            <span class="bg-amber-600 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-lg uppercase tracking-wider">Не учебный день</span>
+                            <template x-if="currentUser && currentUser.role !== 2">
+                                <span class="text-xs text-amber-100 mt-2 opacity-80">Нажмите для отмены</span>
+                            </template>
                         </div>
 
                         <div class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/50 px-4 py-3.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between z-10">
@@ -387,7 +389,7 @@
                                 <h3 class="font-bold text-gray-800 dark:text-gray-100 text-base leading-tight" x-text="dayName"></h3>
                                 <span class="text-[11px] font-semibold text-teal-700 dark:text-teal-300 mt-0.5" x-text="getDateForDay(index)"></span>
                             </div>
-                            <div class="flex items-center space-x-1.5">
+                            <div class="flex items-center space-x-1.5" x-show="currentUser && currentUser.role !== 2" x-cloak>
                                 <button @click="openAddClassLessonModal(dayName)" class="w-6 h-6 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-teal-500 hover:text-white dark:hover:bg-teal-600 text-gray-600 dark:text-gray-300 flex items-center justify-center text-xs transition z-30" title="Добавить урок">
                                     <i class="fa-solid fa-plus"></i>
                                 </button>
@@ -413,17 +415,19 @@
                                         <div class="flex items-center justify-between pt-1 gap-2">
                                             <div class="flex-1 min-w-0">
                                                 <template x-if="lesson.homework">
-                                                    <div @click="openEditHomeworkModal(lesson)" class="text-xs text-gray-600 dark:text-gray-300 bg-gray-100/70 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-2 py-1 rounded-lg font-medium cursor-pointer hover:bg-gray-200/50 transition truncate" title="Нажмите, чтобы изменить Д/З">
+                                                    <div @click="currentUser && currentUser.role !== 2 ? openEditHomeworkModal(lesson) : null" :class="currentUser && currentUser.role === 2 ? 'cursor-default' : 'cursor-pointer hover:bg-gray-200/50'" class="text-xs text-gray-600 dark:text-gray-300 bg-gray-100/70 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 px-2 py-1 rounded-lg font-medium transition truncate" :title="currentUser && currentUser.role === 2 ? 'Домашнее задание' : 'Нажмите, чтобы изменить Д/З'">
                                                         <i class="fa-solid fa-pen-to-square mr-1 text-teal-600 dark:text-teal-400"></i><span x-text="lesson.homework"></span>
                                                     </div>
                                                 </template>
                                                 <template x-if="!lesson.homework">
-                                                    <button @click="openEditHomeworkModal(lesson)" class="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center font-medium">
-                                                        <i class="fa-solid fa-plus mr-1"></i>
-                                                    </button>
+                                                    <template x-if="currentUser && currentUser.role !== 2">
+                                                        <button @click="openEditHomeworkModal(lesson)" class="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center font-medium" title="Добавить домашнее задание">
+                                                            <i class="fa-solid fa-plus mr-1"></i>Добавить Д/З
+                                                        </button>
+                                                    </template>
                                                 </template>
                                             </div>
-                                            <div class="shrink-0">
+                                            <div class="shrink-0" x-show="currentUser && currentUser.role !== 2" x-cloak>
                                                 <button @click="deleteClassLesson(lesson.id)" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition p-1" title="Удалить урок">
                                                     <i class="fa-solid fa-trash-can text-xs"></i>
                                                 </button>
@@ -506,10 +510,10 @@
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col md:flex-row items-center justify-between gap-4 transition-colors duration-200">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white">Справочник кружков</h2>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Сортировка по дням недели и времени</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400" x-text="unusedClubsText"></p>
                 </div>
                 <button @click="openAddClubModal()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-sm transition flex items-center">
-                    <i class="fa-solid fa-plus mr-2"></i>Добавить кружок
+                    <i class="fa-solid fa-plus mr-2"></i>Добавить
                 </button>
             </div>
 
@@ -533,11 +537,14 @@
                                 <td class="py-4 px-6 font-mono text-gray-600 dark:text-gray-300 text-xs">
                                     <i class="fa-regular fa-clock mr-1 text-gray-400"></i><span x-text="club.time"></span>
                                 </td>
-                                <td class="py-4 px-6 text-right space-x-2">
-                                    <button @click="deleteClub(club.id)" class="text-red-600 dark:text-red-400 hover:text-red-800 font-medium text-xs bg-red-50 dark:bg-red-900/40 px-3 py-1.5 rounded-lg transition">
-                                        <i class="fa-solid fa-trash mr-1"></i>Удалить
-                                    </button>
-                                </td>
+                                 <td class="py-4 px-6 text-right space-x-2">
+                                     <button @click="openEditClubModal(club)" class="text-teal-600 dark:text-teal-400 hover:text-teal-800 font-medium text-xs bg-teal-50 dark:bg-teal-900/40 px-3 py-1.5 rounded-lg transition">
+                                         <i class="fa-solid fa-pen mr-1"></i>Изменить
+                                     </button>
+                                     <button @click="deleteClub(club.id)" class="text-red-600 dark:text-red-400 hover:text-red-800 font-medium text-xs bg-red-50 dark:bg-red-900/40 px-3 py-1.5 rounded-lg transition">
+                                         <i class="fa-solid fa-trash mr-1"></i>Удалить
+                                     </button>
+                                 </td>
                             </tr>
                         </template>
                         <tr x-show="sortedClubs.length === 0">
@@ -674,7 +681,7 @@
     </div>
     <div x-show="showClubModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-xs" x-cloak>
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Добавить новый кружок</h3>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white" x-text="isEditingClub ? 'Редактировать кружок' : 'Добавить новый кружок'"></h3>
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Название кружка</label>
                 <input type="text" x-model="newClub.name" placeholder="Шахматы" class="w-full bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:outline-none">
@@ -693,7 +700,7 @@
             </div>
             <div class="flex items-center justify-end space-x-3 pt-2">
                 <button @click="showClubModal = false" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-xl transition">Отмена</button>
-                <button @click="addClub()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition">Сохранить</button>
+                <button @click="saveClub()" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition" x-text="isEditingClub ? 'Сохранить' : 'Добавить'"></button>
             </div>
         </div>
     </div>
@@ -889,6 +896,31 @@
                     });
                 },
 
+                get unusedClubs() {
+                    const chosenClubIds = new Set();
+                    this.students.forEach(student => {
+                        this.daysOfWeek.forEach(day => {
+                            const dayData = this.getStudentDayData(student, day);
+                            if (dayData && Array.isArray(dayData.clubs)) {
+                                dayData.clubs.forEach(cId => chosenClubIds.add(String(cId)));
+                            }
+                        });
+                    });
+                    return this.clubs.filter(club => !chosenClubIds.has(String(club.id)));
+                },
+
+                get unusedClubsText() {
+                    const unused = this.unusedClubs;
+                    if (this.clubs.length === 0) {
+                        return 'Справочник кружков пуст.';
+                    }
+                    if (unused.length === 0) {
+                        return 'На этой неделе все кружки выбраны хотя бы одним учеником.';
+                    }
+                    const names = unused.map(c => `${c.name} (${c.day} ${c.time})`).join(', ');
+                    return `Не выбраны на этой неделе: ${names}`;
+                },
+
                 async init() {
                     this.currentStudentId = null;
                     this.studentQuery = '';
@@ -1005,6 +1037,7 @@
                 homeworkLesson: null,
                 homeworkInput: '',
                 openEditHomeworkModal(lesson) {
+                    if (this.currentUser && this.currentUser.role === 2) return;
                     this.homeworkLesson = lesson;
                     this.homeworkInput = lesson.homework || '';
                     this.showHomeworkModal = true;
@@ -1128,7 +1161,8 @@
                 snackDate: new Date().toISOString().split('T')[0],
                 snackAmount: 100,
                 showClubModal: false,
-                newClub: { name: '', day: 'Понедельник', time: '14:00' },
+                isEditingClub: false,
+                newClub: { id: null, name: '', day: 'Понедельник', time: '14:00' },
                 toastMessage: '',
                 onWeekChange() {
                     this.loadWeekFromServer(this.selectedWeekNum);
@@ -1459,20 +1493,28 @@
                 },
 
                 openAddClubModal() {
-                    this.newClub = { name: '', day: 'Понедельник', time: '14:00' };
+                    this.isEditingClub = false;
+                    this.newClub = { id: null, name: '', day: 'Понедельник', time: '14:00' };
                     this.showClubModal = true;
                 },
 
-                addClub() {
+                openEditClubModal(club) {
+                    this.isEditingClub = true;
+                    this.newClub = { id: club.id, name: club.name, day: club.day, time: club.time };
+                    this.showClubModal = true;
+                },
+
+                saveClub() {
                     if (!this.newClub.name.trim()) return;
-                    fetch('api.php?action=add_club', {
+                    const action = this.isEditingClub ? 'update_club' : 'add_club';
+                    fetch('api.php?action=' + action, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(this.newClub)
                     }).then(() => {
-                        this.newClub = { name: '', day: 'Понедельник', time: '14:00' };
+                        this.newClub = { id: null, name: '', day: 'Понедельник', time: '14:00' };
                         this.showClubModal = false;
-                        this.showToast('Кружок добавлен');
+                        this.showToast(this.isEditingClub ? 'Кружок изменен' : 'Кружок добавлен');
                         this.loadWeekFromServer(this.selectedWeekNum);
                     });
                 },
